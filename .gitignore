@@ -1,0 +1,15 @@
+# STRICT COMPETITION RULE: Never commit raw or masked competition data files!
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.duckdb
+data/
+slides_out/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.DS_Store

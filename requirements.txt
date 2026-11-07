@@ -1,0 +1,6 @@
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+streamlit>=1.32
+# Optional drag-and-drop Tableau-like explorer (run offline with use_kernel_calc=True):
+# pygwalker>=0.4.9
