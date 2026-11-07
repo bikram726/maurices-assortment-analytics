@@ -266,7 +266,7 @@ def build_presentation_deck(
         ("1. Masked Values → Share & Index", f"Never quote masked dollars/AUR as real figures. All visuals use % Share of Chain and Sales/Style-Week Index (100 = Chain Avg) across {d['product_rows']:,} rows."),
         ("2. Profitability Proxy (No COGS)", "With margin absent, profitability is operationalized via Sales per Style-Week (breadth efficiency), STORE Median Weekly Sell-Through, and Depth per Choice."),
         ("3. Composite Key Normalization", f"Cast text IDs ('004') and integer IDs (4) to canonical dept|class|subclass keys—matching {d['joined_subclasses']:,} customer rows and separating {d['duplicate_count']} shared subclass names."),
-        ("4. Unit-Weighted Age Rollups", "Stripped '%' text across all 48 age columns, guarded blank NTF rows, and weighted every Class/Dept/Chain age metric by positive net_sales_units."),
+        ("4. Unit-Weighted & Stabilized Age Mix", "Stripped '%' text across all 48 age columns, shrunk sparse small-sample NTF rows (33.3%/50% flukes), and unit-weighted every rollup."),
         ("5. Weekly STORE Snapshot SOH", f"Averaged soh_units across active STORE weeks only (never summed across weeks or channels; {d['store_missing_soh_pct']}% seasonal null store rows handled cleanly)."),
         ("6. >100% Sell-Through & Returns", f"{d['store_st_over_100_pct']}% of STORE rows exceed 100% sell-through from mid-week restocking (modeled via median + restock frequency); {d['negative_unit_rows']:,} net-return rows preserved."),
     ]
@@ -287,8 +287,8 @@ def build_presentation_deck(
     # ---------------- SLIDE 4: CUSTOMER ARCHITECTURE (LIV VS PROTECT) ----------------
     s4 = _new_chrome_slide(
         prs, blank, 4,
-        "Customer Diagnosis: Where 'Liv' (35–44) Enters vs. Where 'Protect' (45+) Stays",
-        "New-to-file buyers already skew younger than existing buyers in select gateway departments—showing exactly where to lean in",
+        "Customer Diagnosis: Why the File Aged to 51—and Where 'Liv' (35–44) Converts",
+        "Legacy basics attract bimodal (60+ & 1-trip) NTF buyers—whereas modern gateway categories pull 70%+ under age 51",
         footer_std, demo_mode,
     )
     s4.shapes.add_picture(str(chart_files["slide_03"]), Inches(0.42), Inches(1.06), width=Inches(8.35))
@@ -299,16 +299,16 @@ def build_presentation_deck(
     _add_bullets(
         s4, 9.04, 1.60, 3.74, 5.20,
         [
-            ("30–39 Leak (-175 bps YoY)", "Younger shoppers sit in bottom/mid frequency deciles (episodic event/holiday trips) because everyday racks feel over-assorted in older basics."),
-            ("Gateway Depts Pull Younger", f"Top youth-acquiring departments: {youth_dept_str}."),
-            ("Meet 'Liv' (Age 35, $236/yr)", "25% omnichannel (vs 16% chain avg), $75K–$125K HHI, cross-shops AE, GAP & Target. Wants confidence, current silhouettes, and value beyond promo."),
-            ("Dual-Track Architecture", "Use modern gateway subclasses to acquire 'Liv' online & in-store while maintaining reliable fit blocks for 45+ 'Protect' decile 1–3 loyalists."),
+            ("The Bimodal NTF Trap", "In traditional core basics, even New-to-File entrants skew 60+ or 1-trip 18–29—under-indexing on 35–44 ('Liv') vs. Existing and driving the -175 bps 30–39 leak."),
+            ("Gateway Depts Pull Younger", f"Modern gateway categories break the aging trend: {youth_dept_str}."),
+            ("Meet 'Liv' (Age 35, $236/yr)", "25% omnichannel (vs 16% chain avg), $75K–$125K HHI, cross-shops AE, GAP & Target. Wants fit confidence, current silhouettes, and value beyond promo."),
+            ("Dual-Track Architecture", "Shift style breadth into modern gateway subclasses to acquire 'Liv' while ring-fencing core fit blocks for 45+ 'Protect' decile 1–3 loyalists."),
         ],
-        font_size=9.9,
+        font_size=9.8,
     )
     _set_notes(
         s4,
-        "Look at the orange diamonds versus the stacked bars: New-to-File customers are meaningfully younger than Existing customers in specific gateway departments. Liv isn't rejecting maurices—once aware and considering us, fashion-forward women convert higher. She just needs clear hero entry points and a reason to return after her first event purchase.",
+        "Look closely at the orange diamonds versus the bars on Slide 4—this is a critical finding in the customer file. maurices isn't just passively aging with existing shoppers: in traditional basics, even New-to-File entrants skew 60+ and under-index on 35-to-44 'Liv', directly explaining why 30-to-39 fell 175 bps while 60+ grew 246 bps. Yet in modern gateway departments and trend subclasses, under-51 share surges past 70%. When the product feels current, Liv converts.",
     )
 
     # ---------------- SLIDE 5: OVER VS UNDER ASSORTED ----------------

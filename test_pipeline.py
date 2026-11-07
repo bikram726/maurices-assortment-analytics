@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from pptx import Presentation
 
 from charts import export_full_pack
@@ -48,6 +49,19 @@ def main() -> None:
         assert 8.0 <= diag["store_missing_soh_pct"] <= 22.0, f"Unexpected missing SOH %: {diag['store_missing_soh_pct']}"
         assert 14.0 <= diag["store_st_over_100_pct"] <= 32.0, f"Unexpected >100% ST %: {diag['store_st_over_100_pct']}"
         assert diag["negative_unit_rows"] > 0, "Expected synthetic negative return weeks to be tested!"
+
+        # 5b. Small-sample quantized NTF shrinkage check (e.g. 2 buyers -> 50%/50% in two <51 bands must shrink toward TOTAL)
+        sparse_cust = pd.read_csv(paths["customer"])
+        ntf_cols = [c for c in sparse_cust.columns if c.startswith("NTF ")]
+        sparse_cust.loc[0, ntf_cols] = "0.00%"
+        sparse_cust.loc[0, ntf_cols[1]] = "50.00%"
+        sparse_cust.loc[0, ntf_cols[4]] = "50.00%"
+        sparse_path = tmp / "sparse_cust.csv"
+        sparse_cust.to_csv(sparse_path, index=False)
+        res_sparse = load_and_analyze(paths["product"], paths["time"], sparse_path)
+        row0_key = f"{int(sparse_cust.loc[0, 'dept'])}|{int(sparse_cust.loc[0, 'class'])}|{int(sparse_cust.loc[0, 'subclass'])}"
+        shrunk_val = float(res_sparse["subclasses"].set_index("comp_key").loc[row0_key, "ntf_under_51"])
+        assert shrunk_val < 0.96, f"Expected sparse 2-band 100% NTF fluke to shrink toward TOTAL, got {shrunk_val}"
 
         # 6. Export all 7 high-DPI slide charts + 2 CSVs + brief + 12-slide PPTX
         pack = export_full_pack(res, out, demo_mode=True)

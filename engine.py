@@ -289,6 +289,18 @@ def load_and_analyze(
             else:
                 cust_clean[f"{seg.lower()}_{bucket}"] = np.nan
 
+    # Empirical-Bayes shrinkage for sparse NTF rows (e.g. <=8 populated bands from 2-6 shoppers yielding 33.33%/50.00%)
+    ntf_all = age_map["NTF"]["all"]
+    if ntf_all:
+        ntf_rel = ((cust_clean[ntf_all] > 1e-6).sum(axis=1) / 9.0).clip(0.0, 1.0)
+        for bucket in ("under_51", "under_40", "liv_35_44", "young_18_34", "protect_45_plus"):
+            ntf_col, tot_col = f"ntf_{bucket}", f"total_{bucket}"
+            both_ok = cust_clean[ntf_col].notna() & cust_clean[tot_col].notna()
+            cust_clean.loc[both_ok, ntf_col] = (
+                ntf_rel.loc[both_ok] * cust_clean.loc[both_ok, ntf_col]
+                + (1.0 - ntf_rel.loc[both_ok]) * cust_clean.loc[both_ok, tot_col]
+            )
+
     # 4. Caveat-Safe Subclass Aggregation (STORE vs ONLINE separated properly)
     is_store = prod["channel_norm"].str.contains("STORE", na=False)
     is_online = prod["channel_norm"].str.contains("ONLINE|WEB|ECOM", na=False)
@@ -405,10 +417,12 @@ def load_and_analyze(
         + 0.30 * sub["total_sales_units"].rank(pct=True)
         + 0.30 * sub["sales_per_style"].rank(pct=True)
     )
+    liv_blend = 0.50 * sub["ntf_liv_35_44"].fillna(sub["total_liv_35_44"]) + 0.50 * sub["total_liv_35_44"]
     sub["sc2_younger_ntf_pct"] = 100.0 * (
-        0.45 * sub["ntf_under_51"].rank(pct=True)
-        + 0.35 * sub["ntf_liv_35_44"].rank(pct=True)
-        + 0.20 * sub["online_share"].rank(pct=True)
+        0.35 * sub["ntf_under_51"].rank(pct=True)
+        + 0.25 * sub["total_under_51"].rank(pct=True)
+        + 0.25 * liv_blend.rank(pct=True)
+        + 0.15 * sub["online_share"].rank(pct=True)
     )
     sub["ideal_assortment_score"] = 0.55 * sub["sc1_volume_profit_pct"] + 0.45 * sub["sc2_younger_ntf_pct"]
 
