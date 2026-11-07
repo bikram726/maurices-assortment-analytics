@@ -2,10 +2,10 @@
 
 Used ONLY for local testing / demo mode when competition CSVs are not yet placed in `data/`.
 Reproduces all schema traps described in the data dictionary:
-- 104 fiscal weeks (Oct 6, 2024 – Oct 3, 2026) on an August-start 4-5-4 calendar
-- Product IDs stored as zero-padded text ('001') vs Customer IDs stored as integers (1)
+- 104 fiscal weeks (Oct 6, 2024 – Oct 3, 2026) on an August-start 4-5-4 calendar (12 exact columns)
+- Product IDs stored as zero-padded text ('010') vs Customer IDs stored as integers (10)
 - Duplicate subclass descriptions ('FASHION CARDI' appearing under two distinct IDs)
-- STORE-only inventory with ~14% missing soh_units and ~22% weekly_sell_through > 100%
+- STORE-only inventory with ~14% missing soh_units, ~22% weekly_sell_through > 100%, and occasional negative return weeks
 - soh_units_total repeated across STORE and ONLINE rows (trap if summed)
 - 48 age columns (TOTAL, NTF, EXISTING x 16 bands from 18 to 95) formatted as '13.44%'
 """
@@ -36,8 +36,8 @@ CATALOG = [
     (20, "KNIT TOPS", 201, "EVERYDAY TEES", 2001, "SEAMLESS RIBBED BODYSUIT & BABY TEE", 3700, 8, 33.0, 0.28, 1.25),
     (20, "KNIT TOPS", 201, "EVERYDAY TEES", 2002, "CORE V-NECK & CREW TEE", 5800, 16, 49.5, 0.15, 1.01),
     (20, "KNIT TOPS", 202, "GRAPHIC & NOVELTY KNITS", 2003, "PRINT PEPLUM KNIT TOP", 2100, 28, 58.0, 0.11, 0.76),
-    (30, "SWEATERS & LAYERS", 301, "CARDIGANS", 3001, "FASHION CARDI", 3600, 8, 36.0, 0.26, 1.19),   # Duplicate desc #1 (Cropped/Modern)
-    (30, "SWEATERS & LAYERS", 302, "HERITAGE KNITS", 3009, "FASHION CARDI", 1900, 24, 60.5, 0.10, 0.81),  # Duplicate desc #2 (Over-assorted older)
+    (30, "SWEATERS & LAYERS", 301, "CARDIGANS", 3001, "FASHION CARDI", 3600, 8, 36.0, 0.26, 1.19),
+    (30, "SWEATERS & LAYERS", 302, "HERITAGE KNITS", 3009, "FASHION CARDI", 1900, 24, 60.5, 0.10, 0.81),
     (30, "SWEATERS & LAYERS", 301, "CARDIGANS", 3002, "COZY TEXTURED PULLOVER", 4100, 12, 43.0, 0.21, 1.07),
     (40, "DRESSES & OCCASION", 401, "EVENT & DAY DRESSES", 4001, "MIDI OCCASION & EVENT DRESS", 4600, 9, 34.0, 0.32, 1.29),
     (40, "DRESSES & OCCASION", 401, "EVENT & DAY DRESSES", 4002, "TIERED SMOCKED MAXI", 3100, 15, 41.0, 0.24, 1.09),
@@ -60,31 +60,39 @@ def generate_synthetic_csvs(out_dir: Path | str, seed: int = 42) -> dict[str, Pa
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(seed)
 
-    # 1. time_file.csv: 104 fiscal weeks (Oct 6, 2024 – Oct 3, 2026), Aug fiscal year start
+    # 1. time_file.csv: 104 fiscal weeks (Oct 6, 2024 – Oct 3, 2026), exact 12-column schema
     start = date(2024, 10, 6)
     time_rows = []
     for i in range(104):
         ws = start + timedelta(days=7 * i)
+        we = ws + timedelta(days=6)
         m = ws.month
         if m in (8, 9, 10):
-            qtr = "Q1"
+            qtr_num, qtr = 1, "Q1"
         elif m in (11, 12, 1):
-            qtr = "Q2"
+            qtr_num, qtr = 2, "Q2"
         elif m in (2, 3, 4):
-            qtr = "Q3"
+            qtr_num, qtr = 3, "Q3"
         else:
-            qtr = "Q4"
+            qtr_num, qtr = 4, "Q4"
         fy = ws.year + 1 if m >= 8 else ws.year
-        fw_id = fy * 100 + ((i + 10) % 52) + 1
-        # Keep strictly unique chronological fiscal_week_id
-        fw_unique = 202501 + i
+        wk_in_yr = ((i + 9) % 52) + 1
+        mo_in_yr = ((m - 8) % 12) + 1
+        fw_id = fy * 100 + wk_in_yr
         time_rows.append(
             {
-                "fiscal_week_id": fw_unique,
+                "fiscal_week_id": fw_id,
+                "fiscal_month_id": fy * 100 + mo_in_yr,
+                "fiscal_quarter_id": fy * 10 + qtr_num,
+                "fiscal_year_id": fy,
                 "week_start_date": ws.isoformat(),
-                "fiscal_year": f"FY{str(fy)[-2:]}",
-                "fiscal_quarter": qtr,
-                "fiscal_month": ws.strftime("%b"),
+                "week_end_date": we.isoformat(),
+                "fiscal_month_label": ws.strftime("%b"),
+                "fiscal_quarter_label": qtr,
+                "fiscal_year_label": f"FY{str(fy)[-2:]}",
+                "week_seq": i + 1,
+                "month_in_year": mo_in_yr,
+                "week_in_year": wk_in_yr,
             }
         )
     time_df = pd.DataFrame(time_rows)
@@ -100,17 +108,17 @@ def generate_synthetic_csvs(out_dir: Path | str, seed: int = 42) -> dict[str, Pa
         exist_dist = _age_distribution(youth_age + 5.5, 13.0)
         ntf_dist = _age_distribution(youth_age - 3.5, 11.5)
         tot_dist = 0.72 * exist_dist + 0.28 * ntf_dist
-        for seg_name, dist in (("TOTAL", tot_dist), ("NTF", ntf_dist), ("EXISTING", exist_dist)):
+        for seg_name, base_lbl, dist in (("TOTAL", "total", tot_dist), ("NTF", "NTF", ntf_dist), ("EXISTING", "existing", exist_dist)):
             for (lo, hi), val in zip(AGE_BANDS_16, dist):
-                rec[f"{seg_name}_{lo}_{hi}"] = f"{100.0 * val:.2f}%"
+                rec[f"{seg_name} {lo}-{hi} % of {base_lbl}"] = f"{100.0 * val:.2f}%"
         cust_rows.append(rec)
     cust_df = pd.DataFrame(cust_rows)
 
     # 3. product_file_masked.csv (zero-padded text IDs, STORE + ONLINE rows)
     prod_rows = []
     for idx_w, trow in enumerate(time_rows):
-        fw = str(trow["fiscal_week_id"])
-        qtr = trow["fiscal_quarter"]
+        fw = int(trow["fiscal_week_id"])
+        qtr = str(trow["fiscal_quarter_label"])
         is_yr2 = idx_w >= 52
         q_boost = {"Q1": 1.03, "Q2": 1.24, "Q3": 0.92, "Q4": 0.96}[qtr]
 
@@ -126,7 +134,11 @@ def generate_synthetic_csvs(out_dir: Path | str, seed: int = 42) -> dict[str, Pa
             store_units = max(1, int(round(store_dollars / aur_masked)))
             online_units = max(1, int(round(online_dollars / aur_masked)))
 
-            # ~14% of store rows have missing stock data (seasonal/discontinued)
+            # ~2% net-return weeks on online rows to test negative net_sales_units handling
+            if rng.random() < 0.02:
+                online_units = -max(1, int(online_units * 0.1))
+                online_dollars = online_units * aur_masked
+
             missing_stock = rng.random() < 0.14
             if missing_stock:
                 soh = np.nan
@@ -135,22 +147,21 @@ def generate_synthetic_csvs(out_dir: Path | str, seed: int = 42) -> dict[str, Pa
                 depth = np.nan
                 soh_ref = np.nan
             else:
-                # ~22% of store rows have sell-through > 100% due to mid-week restocking
                 fast_restock = rng.random() < 0.22
-                st_rate = float(rng.uniform(1.03, 1.48)) if fast_restock else float(rng.uniform(0.14, 0.78))
+                st_rate = float(rng.uniform(1.04, 1.45)) if fast_restock else float(rng.uniform(0.05, 0.18))
                 soh = max(5.0, round(store_units / st_rate, 1))
                 sc_cnt = max(2, int(round(wk_styles * rng.uniform(1.2, 1.8))))
                 depth = round(soh / sc_cnt, 2)
                 soh_ref = soh
 
             common = {
-                "dept_id": f"{dept_id:03d}",
-                "dept_desc": dept_desc,
-                "class_id": f"{class_id:04d}",
-                "class_desc": class_desc,
-                "subclass_id": f"{sub_id:05d}",
-                "subclass_desc": sub_desc,
                 "the_week": fw,
+                "dept_idnt": f"{dept_id:03d}",
+                "dept_desc": dept_desc,
+                "class_idnt": f"{class_id:03d}",
+                "class_desc": class_desc,
+                "sbclass_idnt": f"{sub_id:04d}",
+                "sbclass_desc": sub_desc,
                 "soh_units_total": soh_ref,
             }
             prod_rows.append(

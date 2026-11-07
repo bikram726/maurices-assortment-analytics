@@ -1,10 +1,13 @@
-# STRICT COMPETITION RULE: Never commit raw or masked competition data files!
+# STRICT COMPETITION RULE: Never commit raw or masked competition data or live deck outputs!
 *.csv
 *.tsv
 *.xlsx
 *.xls
 *.parquet
 *.duckdb
+*.pptx
+*.pdf
+*.docx
 data/
 slides_out/
 __pycache__/

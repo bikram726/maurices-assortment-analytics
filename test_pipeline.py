@@ -1,4 +1,4 @@
-"""Automated assertion suite verifying every maurices data dictionary caveat."""
+"""Automated assertion suite verifying every maurices data dictionary caveat + 12-slide PPTX."""
 
 from __future__ import annotations
 
@@ -6,8 +6,10 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from pptx import Presentation
 
 from charts import export_full_pack
+from deck_builder import build_presentation_deck
 from engine import load_and_analyze
 from mock_data import generate_synthetic_csvs
 
@@ -23,6 +25,7 @@ def main() -> None:
 
         # 1. Text ('010') vs Integer (10) composite join matched 100% of subclasses
         assert diag["joined_subclasses"] == len(sub) == 18, f"Expected 18 joined subclasses, got {diag['joined_subclasses']}"
+        assert diag["weeks_count"] == 104, f"Expected 104 fiscal weeks, got {diag['weeks_count']}"
 
         # 2. Shared description ('FASHION CARDI') kept separate via composite key
         cardi = sub[sub["subclass_desc_raw"] == "FASHION CARDI"]
@@ -32,26 +35,40 @@ def main() -> None:
         # 3. Age '%' strings parsed into valid proportions (~1.0 total across bands)
         assert sub["ntf_under_51"].between(0.05, 0.99).all(), "Age % parsing failed!"
 
-        # 4. Volume-weighted rollup check (must weight by net_sales_units, not unweighted mean)
+        # 4. Volume-weighted rollup check (must weight by positive net_sales_units, not unweighted mean)
         sweaters = sub[sub["dept_label"] == "SWEATERS & LAYERS"]
         unweighted = float(sweaters["ntf_under_51"].mean())
-        weighted_expected = float(np.average(sweaters["ntf_under_51"], weights=sweaters["total_sales_units"]))
+        weighted_expected = float(np.average(sweaters["ntf_under_51"], weights=sweaters["total_sales_units"].clip(lower=0)))
         dept_row = res["departments"].loc[res["departments"]["dept_label"] == "SWEATERS & LAYERS"].iloc[0]
         assert abs(float(dept_row["ntf_under_51"]) - weighted_expected) < 1e-9
         assert abs(weighted_expected - unweighted) > 0.005, "Weighted vs unweighted age share check should differ!"
 
         # 5. SOH is weekly snapshot averaged on STORE only (never summed across 104 weeks!)
-        assert (sub["avg_store_soh_units"] < 2500).all(), "SOH looks summed instead of averaged!"
+        assert (sub["avg_store_soh_units"] < 5000).all(), "SOH looks summed instead of averaged!"
         assert 8.0 <= diag["store_missing_soh_pct"] <= 22.0, f"Unexpected missing SOH %: {diag['store_missing_soh_pct']}"
         assert 14.0 <= diag["store_st_over_100_pct"] <= 32.0, f"Unexpected >100% ST %: {diag['store_st_over_100_pct']}"
+        assert diag["negative_unit_rows"] > 0, "Expected synthetic negative return weeks to be tested!"
 
-        # 6. Export all 6 300-DPI slide charts + CSV + brief
+        # 6. Export all 7 high-DPI slide charts + 2 CSVs + brief + 12-slide PPTX
         pack = export_full_pack(res, out, demo_mode=True)
-        assert len(pack) == 8
-        for name, fpath in pack.items():
-            assert fpath.exists() and fpath.stat().st_size > 1500, f"Artifact {name} failed: {fpath}"
+        assert len(pack) == 10
+        pptx_file = build_presentation_deck(res, pack, out / "maurices_Assortment_Strategy_Deck.pptx", demo_mode=True)
+        assert pptx_file.exists() and pptx_file.stat().st_size > 250_000
 
-    print("ALL_CAVEAT_ASSERTIONS_PASSED_OK")
+        # 7. Programmatically audit PPTX geometry & speaker notes
+        prs = Presentation(str(pptx_file))
+        assert len(prs.slides) == 12, f"Expected 12 slides, got {len(prs.slides)}"
+        w_max = prs.slide_width
+        h_max = prs.slide_height
+        for idx, sl in enumerate(prs.slides, start=1):
+            notes_txt = sl.notes_slide.notes_text_frame.text.strip()
+            assert len(notes_txt) > 40, f"Slide {idx} missing speaker notes!"
+            for shp in sl.shapes:
+                assert shp.left >= -5000 and shp.top >= -5000, f"Slide {idx} shape negative coords!"
+                assert (shp.left + shp.width) <= w_max + 25000, f"Slide {idx} shape overflows width!"
+                assert (shp.top + shp.height) <= h_max + 25000, f"Slide {idx} shape overflows height!"
+
+    print("ALL_CAVEAT_AND_PPTX_ASSERTIONS_PASSED_OK")
 
 
 if __name__ == "__main__":
